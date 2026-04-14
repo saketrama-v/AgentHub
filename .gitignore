@@ -1,0 +1,24 @@
+# Environments
+backend/.env
+frontend/.env
+.env
+
+# Virtual Environment
+.venv/
+venv/
+env/
+__pycache__/
+*.pyc
+
+# Workspaces and local runtime artifacts
+backend/workspaces/
+/workspaces/
+/workspace/
+/Agenthub_Test_Portfolio/
+
+# Node (in case you commit frontend alongside)
+node_modules/
+dist/
+frontend/dist/
+frontend/node_modules/
+.DS_Store
