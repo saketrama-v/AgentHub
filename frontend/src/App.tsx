@@ -561,6 +561,7 @@ export default function App() {
                   ? <div className="text-neutral-600">Waiting for system kickoff...</div>
                   : <Virtuoso
                       data={logs}
+                      style={{ height: '100%' }}
                       itemContent={(index, log) => <LogLine log={log} />}
                       initialTopMostItemIndex={logs.length - 1}
                       followOutput="smooth"
