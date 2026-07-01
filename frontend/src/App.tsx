@@ -382,8 +382,7 @@ export default function App() {
   return (
     <>
       <SignedOut>
-        <div className="flex items-center justify-center w-screen h-screen bg-black">
-          <SmokeBackground smokeColor="#FF0000" />
+        <div className="flex items-center justify-center w-screen h-screen bg-black" style={{ backgroundImage: 'radial-gradient(circle at 50% 50%, #2a0808 0%, #000000 100%)' }}>
           <div className="relative z-10 flex flex-col items-center gap-6">
             <div className="flex items-center gap-3">
               <img src="/logo.png" alt="AgentHub" className="h-12 w-auto object-contain" onError={(e) => { e.currentTarget.style.display = 'none' }} />
@@ -394,8 +393,7 @@ export default function App() {
         </div>
       </SignedOut>
       <SignedIn>
-        <div className="relative w-screen h-screen overflow-hidden text-slate-100 flex flex-col bg-black">
-          <SmokeBackground smokeColor="#FF0000" />
+        <div className="relative w-screen h-screen overflow-hidden text-slate-100 flex flex-col bg-black" style={{ backgroundImage: 'radial-gradient(circle at 50% 50%, #2a0808 0%, #000000 100%)' }}>
 
       {/* ══ SETTINGS OVERLAY ═════════════════════════════════════════════ */}
       {showSettings && (
