@@ -1,4 +1,6 @@
-import { useState, useEffect, useRef, useCallback } from 'react'
+import { useState, useEffect, useRef, useCallback, memo } from 'react'
+import { Virtuoso } from 'react-virtuoso'
+import { SignedIn, SignedOut, SignIn, UserButton } from '@clerk/clerk-react'
 import { AnsiUp } from 'ansi_up'
 import { SmokeBackground } from '@/components/ui/spooky-smoke-animation'
 import { Light as SyntaxHighlighter } from 'react-syntax-highlighter'
@@ -90,6 +92,10 @@ function statusPill(status: Session['status']) {
 function fmtDate(iso: string) {
   return new Date(iso).toLocaleDateString(undefined, { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' })
 }
+
+const LogLine = memo(({ log }: { log: string }) => {
+  return <div className="mb-[1px]" dangerouslySetInnerHTML={{ __html: ansiUp.ansi_to_html(log) }} />
+})
 
 // ─── Component ─────────────────────────────────────────────────────────────
 
@@ -220,8 +226,11 @@ export default function App() {
     ws.onmessage = ({ data }: MessageEvent<string>) => {
       if (data.trim() === '__HUMAN_INPUT_REQUIRED__') {
         setAwaitingHuman(true)
-        setLogs(prev => [...prev.filter(l => !l.includes('Waiting for kickoff')),
-          '🤝 Agent is requesting your feedback. Type below and press Send.'])
+        setLogs(prev => {
+          let next = prev;
+          if (next.length > 0 && next[0].includes('Waiting for kickoff')) next = next.slice(1);
+          return [...next, '🤝 Agent is requesting your feedback. Type below and press Send.']
+        })
         return
       }
       if (data.startsWith('__SESSION_STARTED__:')) {
@@ -239,7 +248,13 @@ export default function App() {
       if (data.trim() === '__EXECUTION_FAILED__') {
         setExecStatus('error'); setIsProcessing(false); fetchSessions(); return
       }
-      setLogs(prev => [...prev.filter(l => !l.includes('Waiting for kickoff')), data])
+      setLogs(prev => {
+        let next = prev;
+        if (next.length > 0 && next[0].includes('Waiting for kickoff')) next = next.slice(1);
+        next = [...next, data];
+        if (next.length > 5000) return next.slice(next.length - 5000);
+        return next;
+      })
       setIsProcessing(true)
     }
     ws.onclose = (e) => {
@@ -365,8 +380,22 @@ export default function App() {
 
   // ─────────────────────────────────────────────────────────────────────────
   return (
-    <div className="relative w-screen h-screen overflow-hidden text-slate-100 flex flex-col bg-black">
-      <SmokeBackground smokeColor="#FF0000" />
+    <>
+      <SignedOut>
+        <div className="flex items-center justify-center w-screen h-screen bg-black">
+          <SmokeBackground smokeColor="#FF0000" />
+          <div className="relative z-10 flex flex-col items-center gap-6">
+            <div className="flex items-center gap-3">
+              <img src="/logo.png" alt="AgentHub" className="h-12 w-auto object-contain" onError={(e) => { e.currentTarget.style.display = 'none' }} />
+              <span className="font-mono font-bold text-2xl tracking-wider text-neutral-200">AgentHub Studio</span>
+            </div>
+            <SignIn appearance={{ elements: { formButtonPrimary: "bg-red-600 hover:bg-red-500 text-white font-semibold shadow-lg shadow-red-900/20", footerActionLink: "text-red-500 hover:text-red-400" } }} />
+          </div>
+        </div>
+      </SignedOut>
+      <SignedIn>
+        <div className="relative w-screen h-screen overflow-hidden text-slate-100 flex flex-col bg-black">
+          <SmokeBackground smokeColor="#FF0000" />
 
       {/* ══ SETTINGS OVERLAY ═════════════════════════════════════════════ */}
       {showSettings && (
@@ -412,7 +441,7 @@ export default function App() {
         <button onClick={() => setShowSettings(true)} title="Settings" className="p-2 rounded-lg text-neutral-500 hover:text-neutral-200 hover:bg-white/5 transition-all">
           <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="3"/><path d="M12 2v2M12 20v2M4.22 4.22l1.42 1.42M18.36 18.36l1.42 1.42M2 12h2M20 12h2M4.22 19.78l1.42-1.42M18.36 5.64l1.42-1.42"/></svg>
         </button>
-        <div className="w-8 h-8 rounded-full bg-red-700/40 border border-red-600/50 flex items-center justify-center text-xs font-bold text-red-300 cursor-pointer hover:bg-red-700/60 transition-all select-none">U</div>
+        <UserButton appearance={{ elements: { userButtonAvatarBox: "w-8 h-8 rounded-full border border-red-600/50" } }} />
       </div>
 
       {/* ══ MAIN LAYOUT ══════════════════════════════════════════════════ */}
@@ -525,15 +554,17 @@ export default function App() {
             <div className="flex-1 flex flex-col min-h-0">
                {/* Terminal Output */}
                <div
-                ref={terminalRef}
-                className="flex-1 bg-black/60 m-3 mb-0 p-3 rounded-xl border border-red-900/20 font-mono text-xs overflow-y-auto overflow-x-auto whitespace-pre text-neutral-200 min-h-0"
+                className="flex-1 bg-black/60 m-3 mb-0 p-3 rounded-xl border border-red-900/20 font-mono text-xs overflow-hidden text-neutral-200 min-h-0"
                 style={{ lineHeight: '1.05', fontFamily: '"Consolas", Monaco, "Courier New", monospace' }}
               >
                 {logs.length === 0
                   ? <div className="text-neutral-600">Waiting for system kickoff...</div>
-                  : logs.map((log, i) => (
-                      <div key={i} className="mb-[1px]" dangerouslySetInnerHTML={{ __html: ansiUp.ansi_to_html(log) }} />
-                    ))
+                  : <Virtuoso
+                      data={logs}
+                      itemContent={(index, log) => <LogLine log={log} />}
+                      initialTopMostItemIndex={logs.length - 1}
+                      followOutput="smooth"
+                    />
                 }
               </div>
 
@@ -695,5 +726,7 @@ export default function App() {
 
       </div>
     </div>
+      </SignedIn>
+    </>
   )
 }
