@@ -64,8 +64,8 @@ void main(){gl_Position=position;}`;
 
   updateScale() {
     // Lower the resolution multiplier. Complex noise shaders on high-DPI screens 
-    // cause massive GPU bottleneck. 0.5 looks almost identical but is 4x to 16x faster.
-    const dpr = 0.5;
+    // cause massive GPU bottleneck. 0.25 looks almost identical but is 16x faster.
+    const dpr = 0.25;
     const { innerWidth: width, innerHeight: height } = window;
     this.canvas.width = width * dpr;
     this.canvas.height = height * dpr;
