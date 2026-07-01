@@ -382,7 +382,8 @@ export default function App() {
   return (
     <>
       <SignedOut>
-        <div className="flex items-center justify-center w-screen h-screen bg-black" style={{ backgroundImage: 'radial-gradient(circle at 50% 50%, #2a0808 0%, #000000 100%)' }}>
+        <div className="flex items-center justify-center w-screen h-screen bg-black">
+          <SmokeBackground smokeColor="#FF0000" />
           <div className="relative z-10 flex flex-col items-center gap-6">
             <div className="flex items-center gap-3">
               <img src="/logo.png" alt="AgentHub" className="h-12 w-auto object-contain" onError={(e) => { e.currentTarget.style.display = 'none' }} />
@@ -393,11 +394,12 @@ export default function App() {
         </div>
       </SignedOut>
       <SignedIn>
-        <div className="relative w-screen h-screen overflow-hidden text-slate-100 flex flex-col bg-black" style={{ backgroundImage: 'radial-gradient(circle at 50% 50%, #2a0808 0%, #000000 100%)' }}>
+        <div className="relative w-screen h-screen overflow-hidden text-slate-100 flex flex-col bg-black">
+          <SmokeBackground smokeColor="#FF0000" />
 
       {/* ══ SETTINGS OVERLAY ═════════════════════════════════════════════ */}
       {showSettings && (
-        <div className="absolute inset-0 z-50 flex items-center justify-center bg-black/70 backdrop-blur-sm">
+        <div className="absolute inset-0 z-50 flex items-center justify-center bg-black/90">
           <div className="w-full max-w-md bg-[#0d0d0d] border border-red-900/40 rounded-2xl shadow-2xl p-6 flex flex-col gap-4">
             <div className="flex items-center justify-between">
               <span className="font-mono text-sm tracking-wider text-neutral-200 uppercase">⚙ Settings</span>
@@ -430,7 +432,7 @@ export default function App() {
       )}
 
       {/* ══ HEADER ═══════════════════════════════════════════════════════ */}
-      <div className="relative z-10 shrink-0 flex items-center px-4 py-2.5 border-b border-red-900/30 bg-black/50 backdrop-blur-md gap-4">
+      <div className="relative z-10 shrink-0 flex items-center px-4 py-2.5 border-b border-red-900/30 bg-[#0a0a0a] gap-4">
         <div className="flex items-center gap-3">
           <img src="/logo.png" alt="AgentHub" className="h-8 w-auto object-contain" onError={(e) => { e.currentTarget.style.display = 'none' }} />
           <span className="font-mono font-bold text-sm tracking-wider text-neutral-200">AgentHub Studio</span>
@@ -446,7 +448,7 @@ export default function App() {
       <div className="relative z-10 flex-1 flex min-h-0 p-3 gap-3">
 
         {/* ── SIDEBAR (Sessions) ──────────────────────────────────────── */}
-        <div className={`absolute top-3 bottom-3 left-3 z-20 flex flex-col bg-black/50 backdrop-blur-md border border-red-900/30 rounded-2xl shadow-2xl transition-all duration-300 overflow-hidden ${sidebarOpen ? 'w-56' : 'w-10'}`}>
+        <div className={`absolute top-3 bottom-3 left-3 z-20 flex flex-col bg-[#0a0a0a] border border-red-900/30 rounded-2xl shadow-2xl transition-all duration-300 overflow-hidden ${sidebarOpen ? 'w-56' : 'w-10'}`}>
           <div className="flex items-center p-2 border-b border-red-900/30 shrink-0 gap-1">
             {sidebarOpen && <span className="flex-1 font-mono text-[10px] tracking-widest text-neutral-500 uppercase pl-1">Sessions</span>}
             {sidebarOpen && sessions.length > 0 && (
@@ -515,7 +517,7 @@ export default function App() {
         </div>
 
         {/* ── CENTRAL AREA (Terminal / Editor) ────────────────────────── */}
-        <div className="flex-1 flex flex-col min-w-0 bg-black/40 backdrop-blur-md border border-red-900/30 rounded-2xl shadow-2xl overflow-hidden ml-[52px] lg:mr-[52px]">
+        <div className="flex-1 flex flex-col min-w-0 bg-[#0a0a0a] border border-red-900/30 rounded-2xl shadow-2xl overflow-hidden ml-[52px] lg:mr-[52px]">
           
           {/* Header Tabs Navigation */}
           <div className="px-3 border-b border-red-900/30 flex items-center shrink-0 bg-black/50">
@@ -673,7 +675,7 @@ export default function App() {
         </div>
 
         {/* ── WORKSPACE SIDEBAR ───────────────────────────────────────── */}
-        <div className={`hidden lg:flex absolute top-3 bottom-3 right-3 z-20 flex-col bg-black/40 backdrop-blur-md border border-red-900/30 rounded-2xl shadow-2xl transition-all duration-300 overflow-hidden ${workspaceOpen ? 'w-[260px]' : 'w-10'}`}>
+        <div className={`hidden lg:flex absolute top-3 bottom-3 right-3 z-20 flex-col bg-[#0a0a0a] border border-red-900/30 rounded-2xl shadow-2xl transition-all duration-300 overflow-hidden ${workspaceOpen ? 'w-[260px]' : 'w-10'}`}>
           <div className="p-2 border-b border-red-900/30 font-mono text-[10px] tracking-widest text-neutral-500 uppercase flex items-center justify-between shrink-0">
             <button onClick={() => setWorkspaceOpen(o => !o)} className="text-neutral-500 hover:text-neutral-300 transition-colors p-1 rounded-lg hover:bg-white/5 text-base leading-none">
               {workspaceOpen ? '›' : '‹'}
