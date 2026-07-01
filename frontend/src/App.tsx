@@ -448,7 +448,7 @@ export default function App() {
       <div className="relative z-10 flex-1 flex min-h-0 p-3 gap-3">
 
         {/* ── SIDEBAR (Sessions) ──────────────────────────────────────── */}
-        <div className={`flex flex-col bg-black/50 backdrop-blur-md border border-red-900/30 rounded-2xl shadow-2xl transition-all duration-300 shrink-0 overflow-hidden ${sidebarOpen ? 'w-56' : 'w-10'}`}>
+        <div className={`absolute top-3 bottom-3 left-3 z-20 flex flex-col bg-black/50 backdrop-blur-md border border-red-900/30 rounded-2xl shadow-2xl transition-all duration-300 overflow-hidden ${sidebarOpen ? 'w-56' : 'w-10'}`}>
           <div className="flex items-center p-2 border-b border-red-900/30 shrink-0 gap-1">
             {sidebarOpen && <span className="flex-1 font-mono text-[10px] tracking-widest text-neutral-500 uppercase pl-1">Sessions</span>}
             {sidebarOpen && sessions.length > 0 && (
@@ -517,7 +517,7 @@ export default function App() {
         </div>
 
         {/* ── CENTRAL AREA (Terminal / Editor) ────────────────────────── */}
-        <div className="flex-1 flex flex-col min-w-0 bg-black/40 backdrop-blur-md border border-red-900/30 rounded-2xl shadow-2xl overflow-hidden">
+        <div className="flex-1 flex flex-col min-w-0 bg-black/40 backdrop-blur-md border border-red-900/30 rounded-2xl shadow-2xl overflow-hidden ml-[52px] lg:mr-[52px]">
           
           {/* Header Tabs Navigation */}
           <div className="px-3 border-b border-red-900/30 flex items-center shrink-0 bg-black/50">
@@ -675,7 +675,7 @@ export default function App() {
         </div>
 
         {/* ── WORKSPACE SIDEBAR ───────────────────────────────────────── */}
-        <div className={`hidden lg:flex flex-col bg-black/40 backdrop-blur-md border border-red-900/30 rounded-2xl shadow-2xl transition-all duration-300 shrink-0 overflow-hidden ${workspaceOpen ? 'w-[260px]' : 'w-10'}`}>
+        <div className={`hidden lg:flex absolute top-3 bottom-3 right-3 z-20 flex-col bg-black/40 backdrop-blur-md border border-red-900/30 rounded-2xl shadow-2xl transition-all duration-300 overflow-hidden ${workspaceOpen ? 'w-[260px]' : 'w-10'}`}>
           <div className="p-2 border-b border-red-900/30 font-mono text-[10px] tracking-widest text-neutral-500 uppercase flex items-center justify-between shrink-0">
             <button onClick={() => setWorkspaceOpen(o => !o)} className="text-neutral-500 hover:text-neutral-300 transition-colors p-1 rounded-lg hover:bg-white/5 text-base leading-none">
               {workspaceOpen ? '›' : '‹'}
