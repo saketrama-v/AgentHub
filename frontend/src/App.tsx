@@ -205,6 +205,13 @@ export default function App() {
   }, [fetchWithAuth])
 
   useEffect(() => {
+    if (activeSessionId) {
+      const s = sessions.find(s => s.id === activeSessionId)
+      if (s) setExecStatus(s.status)
+    }
+  }, [sessions, activeSessionId])
+
+  useEffect(() => {
     if (!activeSessionId) return
     if (execStatus !== 'running' || resumeSessionId === activeSessionId) {
       fetchLogs(activeSessionId)
