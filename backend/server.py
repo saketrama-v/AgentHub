@@ -23,8 +23,8 @@ from slowapi.errors import RateLimitExceeded
 from auth import get_current_user
 from main import execute_agenthub_run
 
-# Force Rich / CrewAI to render narrower box-drawing to fit the UI
-os.environ["COLUMNS"] = "57"
+# Force Rich / CrewAI to render wider box-drawing to prevent messy wrapping in the UI
+os.environ["COLUMNS"] = "150"
 
 WORKSPACES_ROOT = Path("./workspaces")
 WORKSPACES_ROOT.mkdir(exist_ok=True)

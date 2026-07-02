@@ -55,8 +55,7 @@ def execute_agenthub_run(
     agenthub_crew = Crew(
         agents=crew_agents,
         tasks=tasks,
-        process=Process.hierarchical,
-        manager_agent=agents["manager_agent"],
+        process=Process.sequential,
         verbose=True,
         max_rpm=8,  # Stay within free-tier limits
     )
