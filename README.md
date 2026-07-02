@@ -16,6 +16,7 @@ A fully capable, Human-in-the-Loop Cloud IDE powered by a hierarchical multi-age
 
 ## Features
 - **Hierarchical Agent Teams**: Choose which AI specialists (Tech Lead, QA, Frontend, Backend, Librarian) to assign to your projects.
+- **Bring Your Own Key (BYOK) & Security**: Enter your API keys directly into the UI (stored securely in your browser's localStorage). A real-time secret scrubber masks your API keys in the live logs and terminal output, ensuring your credentials are never leaked.
 - **Glassmorphic IDE UI**: A hyper-modern, real-time code editor and terminal interface bundled into the browser.
 - **Human-in-the-Loop (HITL)**: Agents will physically pause their execution to ask for human feedback, passwords, or clarification before proceeding.
 - **Live WebSocket streaming**: See exactly what the AI engineers are thinking and building in real-time.
