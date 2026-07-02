@@ -1,26 +1,9 @@
 import os
 from crewai import Task
-from agents import (
-    tech_lead, security_admin, librarian, moderator,
-    qa_engineer, frontend_engineer, backend_engineer,
-    senior_dev, devops_specialist,
-    file_write_tool, file_read_tool
-)
-
-# Agent key → role string mapping for filtering
-AGENT_ROLE_MAP = {
-    "librarian": librarian,
-    "tech_lead": tech_lead,
-    "backend_engineer": backend_engineer,
-    "frontend_engineer": frontend_engineer,
-    "senior_dev": senior_dev,
-    "qa_engineer": qa_engineer,
-    "security_admin": security_admin,
-    "devops_specialist": devops_specialist,
-}
+from agents import file_write_tool, file_read_tool
 
 
-def create_moderation_tasks(user_request: str) -> Task:
+def create_moderation_tasks(user_request: str, agents: dict) -> Task:
     return Task(
         description=(
             f"Review the user's request: '{user_request}'. "
@@ -28,13 +11,14 @@ def create_moderation_tasks(user_request: str) -> Task:
             "If it is spam, impossible, or harmful, output exactly 'REJECTED: [Reason]'."
         ),
         expected_output="Exactly the word 'APPROVED' or 'REJECTED: [Reason]'.",
-        agent=moderator
+        agent=agents["moderator"]
     )
 
 
 def create_engineering_tasks(
     user_request: str,
     workspace_path: str,
+    agents: dict,
     active_agents: list = None
 ) -> list[Task]:
     """
@@ -43,16 +27,19 @@ def create_engineering_tasks(
     Args:
         user_request:   The user's prompt.
         workspace_path: Session folder where all files must be saved.
+        agents:         Dictionary of initialized agent instances.
         active_agents:  Agent keys to include — empty means include all.
     """
     os.makedirs(workspace_path, exist_ok=True)
     wp = workspace_path  # short alias for readability in descriptions
-    enabled = set(active_agents) if active_agents else set(AGENT_ROLE_MAP.keys())
+    
+    # agents parameter has all available agents.
+    enabled = set(active_agents) if active_agents else set(agents.keys())
 
     all_tasks = []
 
     # ── Context ──────────────────────────────────────────────────────────
-    if "librarian" in enabled:
+    if "librarian" in enabled and "librarian" in agents:
         all_tasks.append(Task(
             description=(
                 f"Analyze the request: '{user_request}'. "
@@ -60,11 +47,11 @@ def create_engineering_tasks(
                 "guidelines relevant to this specific project."
             ),
             expected_output="Concise architectural context and rules for the team.",
-            agent=librarian
+            agent=agents["librarian"]
         ))
 
     # ── Planning ─────────────────────────────────────────────────────────
-    if "tech_lead" in enabled:
+    if "tech_lead" in enabled and "tech_lead" in agents:
         all_tasks.append(Task(
             description=(
                 f"Create a detailed technical roadmap for: '{user_request}'. "
@@ -73,12 +60,12 @@ def create_engineering_tasks(
                 f"Use FileWriterTool to save the roadmap as '{wp}/ROADMAP.md'."
             ),
             expected_output=f"Structured technical plan saved as {wp}/ROADMAP.md.",
-            agent=tech_lead,
+            agent=agents["tech_lead"],
             tools=[file_write_tool]
         ))
 
     # ── Backend ───────────────────────────────────────────────────────────
-    if "backend_engineer" in enabled:
+    if "backend_engineer" in enabled and "backend_engineer" in agents:
         all_tasks.append(Task(
             description=(
                 "Write ALL backend/server-side source files based on the Tech Lead's roadmap. "
@@ -87,12 +74,12 @@ def create_engineering_tasks(
                 "Ensure all files are complete, runnable, PEP8-compliant, and fully documented."
             ),
             expected_output=f"All backend source files written to {wp}/.",
-            agent=backend_engineer,
+            agent=agents["backend_engineer"],
             tools=[file_write_tool, file_read_tool]
         ))
 
     # ── Frontend ──────────────────────────────────────────────────────────
-    if "frontend_engineer" in enabled:
+    if "frontend_engineer" in enabled and "frontend_engineer" in agents:
         all_tasks.append(Task(
             description=(
                 "Write ALL frontend/UI source files based on the Tech Lead's roadmap. "
@@ -101,12 +88,12 @@ def create_engineering_tasks(
                 "Do NOT output code as text — write every file directly to disk."
             ),
             expected_output=f"All frontend source files written to {wp}/.",
-            agent=frontend_engineer,
+            agent=agents["frontend_engineer"],
             tools=[file_write_tool, file_read_tool]
         ))
 
     # ── Senior Review ─────────────────────────────────────────────────────
-    if "senior_dev" in enabled:
+    if "senior_dev" in enabled and "senior_dev" in agents:
         all_tasks.append(Task(
             description=(
                 f"Read ALL code files from '{wp}/' using FileReadTool. "
@@ -115,13 +102,13 @@ def create_engineering_tasks(
                 f"Write '{wp}/REVIEW.md' summarising every change made."
             ),
             expected_output=f"Optimized files overwritten in {wp}/. REVIEW.md written.",
-            agent=senior_dev,
+            agent=agents["senior_dev"],
             tools=[file_write_tool, file_read_tool],
             human_input=True
         ))
 
     # ── QA ────────────────────────────────────────────────────────────────
-    if "qa_engineer" in enabled:
+    if "qa_engineer" in enabled and "qa_engineer" in agents:
         all_tasks.append(Task(
             description=(
                 f"Read the optimized code from '{wp}/' using FileReadTool. "
@@ -130,13 +117,13 @@ def create_engineering_tasks(
                 f"Write '{wp}/QA_REPORT.md' detailing what was tested and any issues."
             ),
             expected_output=f"Test suite at {wp}/tests/test_suite.py. QA_REPORT.md written.",
-            agent=qa_engineer,
+            agent=agents["qa_engineer"],
             tools=[file_write_tool, file_read_tool],
             human_input=True
         ))
 
     # ── Security ──────────────────────────────────────────────────────────
-    if "security_admin" in enabled:
+    if "security_admin" in enabled and "security_admin" in agents:
         all_tasks.append(Task(
             description=(
                 f"Read all code from '{wp}/' using FileReadTool. "
@@ -144,12 +131,12 @@ def create_engineering_tasks(
                 f"Write '{wp}/SECURITY_REPORT.md' (PASS or list of issues)."
             ),
             expected_output=f"Security report at {wp}/SECURITY_REPORT.md.",
-            agent=security_admin,
+            agent=agents["security_admin"],
             tools=[file_write_tool, file_read_tool]
         ))
 
     # ── DevOps ────────────────────────────────────────────────────────────
-    if "devops_specialist" in enabled:
+    if "devops_specialist" in enabled and "devops_specialist" in agents:
         all_tasks.append(Task(
             description=(
                 f"Read the final code from '{wp}/' using FileReadTool. "
@@ -158,7 +145,7 @@ def create_engineering_tasks(
                 f"Write '{wp}/README.md' with setup and run instructions."
             ),
             expected_output=f"Deploy configs and README.md in {wp}/.",
-            agent=devops_specialist,
+            agent=agents["devops_specialist"],
             tools=[file_write_tool, file_read_tool]
         ))
 

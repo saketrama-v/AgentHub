@@ -195,6 +195,8 @@ class PromptRequest(BaseModel):
     session_name: Optional[str] = None
     agents: Optional[list[str]] = None
     resume_session_id: Optional[str] = None
+    llm_keys: Optional[dict] = None
+    llm_provider: Optional[str] = "gemini"
 
 
 @app.post("/api/kickoff")
@@ -244,7 +246,9 @@ async def kickoff_agent(request: PromptRequest):
             execute_agenthub_run(
                 request.user_prompt,
                 str(session_path),
-                request.agents or []
+                request.agents or [],
+                request.llm_keys or {},
+                request.llm_provider or "gemini"
             )
             meta["status"] = "done"
             meta["finished_at"] = datetime.now().isoformat()
@@ -374,63 +378,3 @@ async def rename_session(session_id: str, body: RenameRequest):
     _write_meta(sp, meta)
     return {"id": session_id, "name": new_name}
 
-
-# ─── Config API (.env) ─────────────────────────────────────────────────────
-
-def _parse_env() -> dict:
-    """Parse the .env file into a dict."""
-    result = {}
-    if ENV_PATH.exists():
-        for line in ENV_PATH.read_text(encoding="utf-8").splitlines():
-            line = line.strip()
-            if line and not line.startswith("#") and "=" in line:
-                k, _, v = line.partition("=")
-                result[k.strip()] = v.strip()
-    return result
-
-
-def _write_env(data: dict):
-    """Rewrite the .env file from a dict, preserving comments."""
-    lines = []
-    if ENV_PATH.exists():
-        for line in ENV_PATH.read_text(encoding="utf-8").splitlines():
-            stripped = line.strip()
-            if stripped.startswith("#") or not stripped:
-                lines.append(line)
-                continue
-            if "=" in stripped:
-                k = stripped.split("=", 1)[0].strip()
-                if k in data:
-                    lines.append(f"{k}={data.pop(k)}")
-                    continue
-            lines.append(line)
-    # Append any new keys not previously in .env
-    for k, v in data.items():
-        lines.append(f"{k}={v}")
-    ENV_PATH.write_text("\n".join(lines) + "\n", encoding="utf-8")
-
-
-@app.get("/api/config")
-async def get_config():
-    """Return current .env config — API key is masked for security."""
-    data = _parse_env()
-    masked = {}
-    for k, v in data.items():
-        if "key" in k.lower() or "secret" in k.lower() or "token" in k.lower():
-            masked[k] = v[:6] + "••••••••" + v[-3:] if len(v) > 9 else "••••••••"
-        else:
-            masked[k] = v
-    return {"config": masked}
-
-
-class ConfigUpdateRequest(BaseModel):
-    updates: dict  # e.g. {"GEMINI_API_KEY": "...", "GEMINI_MODEL": "gemini/..."}
-
-
-@app.post("/api/config")
-async def update_config(body: ConfigUpdateRequest):
-    """Write key-value pairs into .env. Will restart is NOT triggered automatically."""
-    if not body.updates:
-        raise HTTPException(status_code=400, detail="No updates provided.")
-    _write_env(dict(body.updates))
-    return {"updated": list(body.updates.keys())}

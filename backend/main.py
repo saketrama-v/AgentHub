@@ -5,32 +5,15 @@ import warnings
 warnings.filterwarnings("ignore", category=UserWarning, module="pydantic")
 
 from crewai import Crew, Process
-from agents import (
-    tech_lead, security_admin, librarian, moderator, qa_engineer,
-    frontend_engineer, backend_engineer, senior_dev, devops_specialist,
-    manager_agent
-)
+from agents import create_agents
 from tasks import create_moderation_tasks, create_engineering_tasks
-
-# Agent registry so we can filter by name
-ALL_AGENTS = {
-    "moderator": moderator,
-    "librarian": librarian,
-    "tech_lead": tech_lead,
-    "backend_engineer": backend_engineer,
-    "frontend_engineer": frontend_engineer,
-    "senior_dev": senior_dev,
-    "qa_engineer": qa_engineer,
-    "security_admin": security_admin,
-    "devops_specialist": devops_specialist,
-    "manager_agent": manager_agent,
-}
-
 
 def execute_agenthub_run(
     user_request: str,
     workspace_path: str = "./workspace",
-    active_agents: list = None
+    active_agents: list = None,
+    llm_keys: dict = None,
+    llm_provider: str = "gemini"
 ):
     """
     Run the full AgentHub pipeline.
@@ -40,10 +23,15 @@ def execute_agenthub_run(
         workspace_path: Where agents should write files (session folder).
         active_agents:  Optional list of agent role keys to include.
                         Empty / None = use all agents.
+        llm_keys:       Dictionary of API keys from the frontend request.
+        llm_provider:   The selected LLM provider (gemini, openai, anthropic).
     """
+    # ── Initialize Dynamic Agents ──────────────────────────────────────────
+    agents = create_agents(llm_keys, llm_provider)
+
     # ── Moderation gate ────────────────────────────────────────────────────
-    mod_task = create_moderation_tasks(user_request)
-    gatekeeper_crew = Crew(agents=[moderator], tasks=[mod_task], verbose=False)
+    mod_task = create_moderation_tasks(user_request, agents)
+    gatekeeper_crew = Crew(agents=[agents["moderator"]], tasks=[mod_task], verbose=False)
     mod_result = gatekeeper_crew.kickoff()
 
     if "REJECTED" in str(mod_result):
@@ -53,30 +41,24 @@ def execute_agenthub_run(
     print("\n✅ Request Approved. Engineering Team is starting...\n")
 
     # ── Build task pipeline ────────────────────────────────────────────────
-    tasks = create_engineering_tasks(user_request, workspace_path, active_agents or [])
+    tasks = create_engineering_tasks(user_request, workspace_path, agents, active_agents or [])
 
     # ── Determine which crew agents are needed ─────────────────────────────
-    # Always include manager; filter the rest if caller specified a subset
     crew_agents = [
-        librarian, tech_lead, frontend_engineer, backend_engineer,
-        senior_dev, qa_engineer, security_admin, devops_specialist
+        agents["librarian"], agents["tech_lead"], agents["frontend_engineer"],
+        agents["backend_engineer"], agents["senior_dev"], agents["qa_engineer"],
+        agents["security_admin"], agents["devops_specialist"]
     ]
     if active_agents:
-        key_map = {
-            "librarian": librarian, "tech_lead": tech_lead,
-            "backend_engineer": backend_engineer, "frontend_engineer": frontend_engineer,
-            "senior_dev": senior_dev, "qa_engineer": qa_engineer,
-            "security_admin": security_admin, "devops_specialist": devops_specialist,
-        }
-        crew_agents = [v for k, v in key_map.items() if k in active_agents]
+        crew_agents = [agents[k] for k in active_agents if k in agents]
 
     agenthub_crew = Crew(
         agents=crew_agents,
         tasks=tasks,
         process=Process.hierarchical,
-        manager_agent=manager_agent,
+        manager_agent=agents["manager_agent"],
         verbose=True,
-        max_rpm=8,  # Stay within 15 RPM free-tier limit
+        max_rpm=8,  # Stay within free-tier limits
     )
 
     print("\n⏳ Agents are working on your request...\n")
@@ -91,7 +73,7 @@ def execute_agenthub_run(
 if __name__ == "__main__":
     print("=" * 50)
     print("  🚀 AgentHub Core Engine v0.4 (Web Ready)")
-    print("  Powered by Google Gemini + CrewAI")
+    print("  Powered by Custom LLM + CrewAI")
     print("  Type 'exit' to quit")
     print("=" * 50)
 

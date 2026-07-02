@@ -135,8 +135,10 @@ export default function App() {
 
   // Settings panel
   const [showSettings, setShowSettings]   = useState(false)
-  const [configValues, setConfigValues]   = useState<Record<string, string>>({})
-  const [configEdits, setConfigEdits]     = useState<Record<string, string>>({})
+  const [llmProvider, setLlmProvider]     = useState(() => localStorage.getItem('agenthub_llm_provider') || 'gemini')
+  const [llmKeys, setLlmKeys]             = useState<Record<string, string>>(() => {
+    try { return JSON.parse(localStorage.getItem('agenthub_llm_keys') || '{}') } catch { return {} }
+  })
   const [configSaving, setConfigSaving]   = useState(false)
   const [configSaved, setConfigSaved]     = useState(false)
 
@@ -202,21 +204,7 @@ export default function App() {
     return () => clearInterval(id)
   }, [activeSessionId]) // eslint-disable-line react-hooks/exhaustive-deps
 
-  // ── Config fetch ───────────────────────────────────────────────────────
-  const fetchConfig = useCallback(async () => {
-    try {
-      const r = await fetch(`${API_URL}/api/config`)
-      if (r.ok) {
-        const data = (await r.json()).config ?? {}
-        setConfigValues(data)
-        setConfigEdits(data)
-      }
-    } catch { /* ignore */ }
-  }, [])
 
-  useEffect(() => {
-    if (showSettings) fetchConfig()
-  }, [showSettings, fetchConfig])
 
   // ── WebSocket ──────────────────────────────────────────────────────────
   useEffect(() => {
@@ -279,6 +267,8 @@ export default function App() {
           session_name: resumeSessionId ? undefined : (sessionName.trim() || undefined),
           agents: selectedAgents,
           resume_session_id: resumeSessionId || undefined,
+          llm_keys: llmKeys,
+          llm_provider: llmProvider,
         }),
       })
     } catch {
@@ -350,18 +340,15 @@ export default function App() {
   const exportZip = () =>
     activeSessionId && window.open(`${API_URL}/api/sessions/${activeSessionId}/export`, '_blank')
 
-  const saveConfig = async () => {
+  const saveConfig = () => {
     setConfigSaving(true)
-    try {
-      await fetch(`${API_URL}/api/config`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ updates: configEdits }),
-      })
+    localStorage.setItem('agenthub_llm_provider', llmProvider)
+    localStorage.setItem('agenthub_llm_keys', JSON.stringify(llmKeys))
+    setTimeout(() => {
+      setConfigSaving(false)
       setConfigSaved(true)
-      setTimeout(() => setConfigSaved(false), 2500)
-    } catch { /* ignore */ }
-    finally { setConfigSaving(false) }
+      setTimeout(() => setConfigSaved(false), 2000)
+    }, 400)
   }
 
   const toggleAgent = (key: string) =>
@@ -406,23 +393,35 @@ export default function App() {
               <button onClick={() => setShowSettings(false)} className="text-neutral-500 hover:text-neutral-200 text-lg leading-none transition-all">✕</button>
             </div>
             <div className="flex flex-col gap-3">
-              {Object.entries(configEdits).map(([k, v]) => (
-                <div key={k} className="flex flex-col gap-1">
-                  <label className="font-mono text-[10px] text-neutral-500 uppercase tracking-widest">{k}</label>
-                  <input
-                    className="bg-black/60 border border-red-900/30 rounded-lg px-3 py-2 text-xs text-neutral-300 font-mono focus:outline-none focus:border-red-500 transition-all"
-                    value={v}
-                    onChange={e => setConfigEdits(prev => ({ ...prev, [k]: e.target.value }))}
-                    placeholder={configValues[k] ?? ''}
-                  />
-                </div>
-              ))}
-              {Object.keys(configEdits).length === 0 && (
-                <p className="text-xs text-neutral-600 text-center py-4">Loading config…</p>
-              )}
+              <div className="flex flex-col gap-1">
+                <label className="font-mono text-[10px] text-neutral-500 uppercase tracking-widest">LLM Provider</label>
+                <select 
+                  className="bg-black/60 border border-red-900/30 rounded-lg px-3 py-2 text-xs text-neutral-300 font-mono focus:outline-none focus:border-red-500 transition-all"
+                  value={llmProvider} onChange={e => setLlmProvider(e.target.value)}
+                >
+                  <option value="gemini">Google Gemini</option>
+                  <option value="openai">OpenAI (GPT-4o)</option>
+                  <option value="anthropic">Anthropic (Claude)</option>
+                </select>
+              </div>
+              <div className="flex flex-col gap-1">
+                <label className="font-mono text-[10px] text-neutral-500 uppercase tracking-widest">Gemini API Key</label>
+                <input className="bg-black/60 border border-red-900/30 rounded-lg px-3 py-2 text-xs text-neutral-300 font-mono focus:outline-none focus:border-red-500 transition-all"
+                  type="password" value={llmKeys['GEMINI_API_KEY'] || ''} onChange={e => setLlmKeys(p => ({ ...p, GEMINI_API_KEY: e.target.value }))} placeholder="AIza..." />
+              </div>
+              <div className="flex flex-col gap-1">
+                <label className="font-mono text-[10px] text-neutral-500 uppercase tracking-widest">OpenAI API Key</label>
+                <input className="bg-black/60 border border-red-900/30 rounded-lg px-3 py-2 text-xs text-neutral-300 font-mono focus:outline-none focus:border-red-500 transition-all"
+                  type="password" value={llmKeys['OPENAI_API_KEY'] || ''} onChange={e => setLlmKeys(p => ({ ...p, OPENAI_API_KEY: e.target.value }))} placeholder="sk-..." />
+              </div>
+              <div className="flex flex-col gap-1">
+                <label className="font-mono text-[10px] text-neutral-500 uppercase tracking-widest">Anthropic API Key</label>
+                <input className="bg-black/60 border border-red-900/30 rounded-lg px-3 py-2 text-xs text-neutral-300 font-mono focus:outline-none focus:border-red-500 transition-all"
+                  type="password" value={llmKeys['ANTHROPIC_API_KEY'] || ''} onChange={e => setLlmKeys(p => ({ ...p, ANTHROPIC_API_KEY: e.target.value }))} placeholder="sk-ant-..." />
+              </div>
             </div>
             <div className="flex items-center justify-between pt-2 border-t border-red-900/20">
-              <p className="text-[10px] text-neutral-600">Changes are saved to <code className="text-neutral-400">.env</code> — restart backend to apply.</p>
+              <p className="text-[10px] text-neutral-600">Keys are saved securely in your browser's <code className="text-neutral-400">localStorage</code>.</p>
               <button onClick={saveConfig} disabled={configSaving} className="px-4 py-2 text-xs rounded-xl bg-red-600 hover:bg-red-500 text-white font-semibold transition-all disabled:opacity-50">
                 {configSaved ? '✓ Saved!' : configSaving ? 'Saving…' : 'Save'}
               </button>
