@@ -1,7 +1,12 @@
-crewai
-crewai-tools
-langchain-google-genai
-python-dotenv
-fastapi
-uvicorn[standard]
-websockets
+crewai==1.9.3
+crewai-tools==1.9.3
+langchain-google-genai==4.2.1
+python-dotenv==1.1.1
+fastapi==0.115.0
+uvicorn[standard]==0.32.0
+websockets==13.1
+
+# Security additions
+PyJWT==2.11.0
+cryptography==46.0.5
+slowapi

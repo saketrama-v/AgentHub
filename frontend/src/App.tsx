@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef, useCallback, memo } from 'react'
 import { Virtuoso } from 'react-virtuoso'
-import { SignedIn, SignedOut, SignIn, UserButton } from '@clerk/clerk-react'
+import { SignedIn, SignedOut, SignIn, UserButton, useAuth } from '@clerk/clerk-react'
 import { AnsiUp } from 'ansi_up'
 import { SmokeBackground } from '@/components/ui/spooky-smoke-animation'
 import { Light as SyntaxHighlighter } from 'react-syntax-highlighter'
@@ -106,6 +106,16 @@ export default function App() {
   const [execStatus, setExecStatus]       = useState<'idle' | 'running' | 'done' | 'error'>('idle')
   const [activeTab, setActiveTab]         = useState<'terminal' | 'editor'>('terminal')
 
+  // Auth
+  const { getToken } = useAuth()
+  
+  const fetchWithAuth = useCallback(async (url: string, options: RequestInit = {}) => {
+    const token = await getToken()
+    const headers = new Headers(options.headers || {})
+    if (token) headers.set('Authorization', `Bearer ${token}`)
+    return fetch(url, { ...options, headers })
+  }, [getToken])
+
   // HITL
   const [awaitingHuman, setAwaitingHuman] = useState(false)
   const [humanFeedback, setHumanFeedback] = useState('')
@@ -159,10 +169,10 @@ export default function App() {
   // ── Sessions poll ──────────────────────────────────────────────────────
   const fetchSessions = useCallback(async () => {
     try {
-      const r = await fetch(`${API_URL}/api/sessions`)
+      const r = await fetchWithAuth(`${API_URL}/api/sessions`)
       if (r.ok) setSessions((await r.json()).sessions ?? [])
     } catch { /* backend offline */ }
-  }, [])
+  }, [fetchWithAuth])
 
   useEffect(() => {
     fetchSessions()
@@ -173,7 +183,7 @@ export default function App() {
   // ── Log history restore when switching sessions ────────────────────────
   const fetchLogs = useCallback(async (sid: string) => {
     try {
-      const r = await fetch(`${API_URL}/api/sessions/${sid}/logs`)
+      const r = await fetchWithAuth(`${API_URL}/api/sessions/${sid}/logs`)
       if (r.ok) {
         const text = await r.text()
         if (text.trim()) {
@@ -184,15 +194,15 @@ export default function App() {
         }
       }
     } catch { /* ignore */ }
-  }, [])
+  }, [fetchWithAuth])
 
   // ── Workspace files poll ───────────────────────────────────────────────
   const fetchSessionFiles = useCallback(async (sid: string) => {
     try {
-      const r = await fetch(`${API_URL}/api/sessions/${sid}/files`)
+      const r = await fetchWithAuth(`${API_URL}/api/sessions/${sid}/files`)
       if (r.ok) setWsFiles((await r.json()).files ?? [])
     } catch { /* ignore */ }
-  }, [])
+  }, [fetchWithAuth])
 
   useEffect(() => {
     if (!activeSessionId) return
@@ -259,7 +269,7 @@ export default function App() {
     setLogs([]); setSelectedFile(null); setWsFiles([])
     setActiveTab('terminal')
     try {
-      await fetch(`${API_URL}/api/kickoff`, {
+      await fetchWithAuth(`${API_URL}/api/kickoff`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -287,7 +297,7 @@ export default function App() {
 
   const handleDelete = async (sid: string) => {
     try {
-      await fetch(`${API_URL}/api/sessions/${sid}`, { method: 'DELETE' })
+      await fetchWithAuth(`${API_URL}/api/sessions/${sid}`, { method: 'DELETE' })
       if (activeSessionId === sid) { setActiveSessionId(null); setWsFiles([]) }
       fetchSessions()
     } catch { /* ignore */ }
@@ -296,7 +306,7 @@ export default function App() {
 
   const handleClearAll = async () => {
     await Promise.all(sessions.map(s =>
-      fetch(`${API_URL}/api/sessions/${s.id}`, { method: 'DELETE' })
+      fetchWithAuth(`${API_URL}/api/sessions/${s.id}`, { method: 'DELETE' })
     ))
     setActiveSessionId(null); setWsFiles([]); setLogs([])
     fetchSessions(); setClearAllConfirm(false)
@@ -305,7 +315,7 @@ export default function App() {
   const handleRename = async (sid: string) => {
     if (!renameValue.trim()) { setRenamingId(null); return }
     try {
-      await fetch(`${API_URL}/api/sessions/${sid}/rename`, {
+      await fetchWithAuth(`${API_URL}/api/sessions/${sid}/rename`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ name: renameValue.trim() }),
@@ -328,7 +338,7 @@ export default function App() {
     if (!activeSessionId) return
     setSelectedFile(path); setLoadingFile(true); setActiveTab('editor')
     try {
-      const r = await fetch(`${API_URL}/api/sessions/${activeSessionId}/read?path=${encodeURIComponent(path)}`)
+      const r = await fetchWithAuth(`${API_URL}/api/sessions/${activeSessionId}/read?path=${encodeURIComponent(path)}`)
       setFileContent(r.ok ? await r.text() : '(Could not read file)')
     } catch { setFileContent('(Network error)') }
     finally { setLoadingFile(false) }

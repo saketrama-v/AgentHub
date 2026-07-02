@@ -11,10 +11,17 @@ from pathlib import Path
 from datetime import datetime
 from typing import Optional
 
-from fastapi import FastAPI, WebSocket, WebSocketDisconnect, HTTPException
+from fastapi import FastAPI, WebSocket, WebSocketDisconnect, HTTPException, Depends, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import StreamingResponse, PlainTextResponse, FileResponse
 from pydantic import BaseModel
+
+from slowapi import Limiter, _rate_limit_exceeded_handler
+from slowapi.util import get_remote_address
+from slowapi.errors import RateLimitExceeded
+
+from auth import get_current_user
+from main import execute_agenthub_run
 
 # Force Rich / CrewAI to render narrower box-drawing to fit the UI
 os.environ["COLUMNS"] = "57"
@@ -22,15 +29,20 @@ os.environ["COLUMNS"] = "57"
 WORKSPACES_ROOT = Path("./workspaces")
 WORKSPACES_ROOT.mkdir(exist_ok=True)
 
-ENV_PATH = Path("./.env")
-
-from main import execute_agenthub_run
-
 app = FastAPI(title="AgentHub Studio Backend")
+
+# Rate Limiter Setup
+limiter = Limiter(key_func=get_remote_address)
+app.state.limiter = limiter
+app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
+
+# CORS Setup
+FRONTEND_URL = os.environ.get("FRONTEND_URL", "http://localhost:5173,https://agent-hub-lyart.vercel.app")
+allow_origins = [url.strip() for url in FRONTEND_URL.split(",")]
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
+    allow_origins=allow_origins,
     allow_methods=["*"],
     allow_headers=["*"],
 )
@@ -49,11 +61,16 @@ class WSOutputRedirector:
         self.loop = None
         self.active_session_path: Optional[Path] = None  # set per-run
         self._log_lock = threading.Lock()
+        self.secrets = set()
 
-    def set_active_session(self, session_path: Optional[Path]):
+    def set_active_session(self, session_path: Optional[Path], secrets: list[str] = None):
         self.active_session_path = session_path
+        self.secrets = set(s for s in (secrets or []) if s and len(s) > 5)
 
     def write(self, msg):
+        for secret in self.secrets:
+            msg = msg.replace(secret, "********")
+
         self.original_stdout.write(msg)
         self.original_stdout.flush()
 
@@ -179,12 +196,17 @@ def _broadcast(msg: str):
                 pass
 
 
-def _guard(session_id: str) -> Path:
+def _guard(session_id: str, user_id: str) -> Path:
     target = (WORKSPACES_ROOT / session_id).resolve()
     if not str(target).startswith(str(WORKSPACES_ROOT.resolve())):
         raise HTTPException(status_code=403, detail="Access denied.")
     if not target.exists():
         raise HTTPException(status_code=404, detail="Session not found.")
+    
+    meta = _read_meta(target)
+    if meta.get("user_id") != user_id:
+        raise HTTPException(status_code=403, detail="Not authorized to access this session.")
+        
     return target
 
 
@@ -200,36 +222,36 @@ class PromptRequest(BaseModel):
 
 
 @app.post("/api/kickoff")
-async def kickoff_agent(request: PromptRequest):
+@limiter.limit("5/minute")
+async def kickoff_agent(request_obj: Request, body: PromptRequest, user_id: str = Depends(get_current_user)):
     """Create (or resume) a session folder, then run CrewAI in a background thread."""
 
     # ── Resume an existing session ──────────────────────────────────────────
-    if request.resume_session_id:
-        session_id = request.resume_session_id
-        session_path = (WORKSPACES_ROOT / session_id).resolve()
-        if not str(session_path).startswith(str(WORKSPACES_ROOT.resolve())) or not session_path.exists():
-            raise HTTPException(status_code=404, detail="Session not found.")
+    if body.resume_session_id:
+        session_id = body.resume_session_id
+        session_path = _guard(session_id, user_id)
         meta = _read_meta(session_path)
         meta["status"] = "running"
         meta["finished_at"] = None
         history = meta.get("history", [])
-        history.append({"prompt": request.user_prompt, "at": datetime.now().isoformat()})
+        history.append({"prompt": body.user_prompt, "at": datetime.now().isoformat()})
         meta["history"] = history
         _write_meta(session_path, meta)
         display_name = meta.get("name", session_id)
 
     # ── Create a brand-new session ──────────────────────────────────────────
     else:
-        raw_name = (request.session_name or "").strip() or request.user_prompt
+        raw_name = (body.session_name or "").strip() or body.user_prompt
         base_slug = _slugify(raw_name)
         session_id = _unique_session_id(base_slug)
         session_path = WORKSPACES_ROOT / session_id
         session_path.mkdir(parents=True, exist_ok=True)
-        display_name = (request.session_name or "").strip() or session_id.replace("_", " ").title()
+        display_name = (body.session_name or "").strip() or session_id.replace("_", " ").title()
         meta = {
             "id": session_id,
             "name": display_name,
-            "prompt": request.user_prompt,
+            "user_id": user_id,
+            "prompt": body.user_prompt,
             "status": "running",
             "started_at": datetime.now().isoformat(),
             "finished_at": None,
@@ -239,16 +261,17 @@ async def kickoff_agent(request: PromptRequest):
 
     def thread_runner():
         # Wire the log file to this session
-        ws_redirector.set_active_session(session_path)
+        secrets = list(body.llm_keys.values()) if body.llm_keys else []
+        ws_redirector.set_active_session(session_path, secrets)
         _broadcast(f"__SESSION_STARTED__:{session_id}")
-        print(f"\n[SERVER] Session '{session_id}' started: {request.user_prompt}")
+        print(f"\n[SERVER] Session '{session_id}' started: {body.user_prompt}")
         try:
             execute_agenthub_run(
-                request.user_prompt,
+                body.user_prompt,
                 str(session_path),
-                request.agents or [],
-                request.llm_keys or {},
-                request.llm_provider or "gemini"
+                body.agents or [],
+                body.llm_keys or {},
+                body.llm_provider or "gemini"
             )
             meta["status"] = "done"
             meta["finished_at"] = datetime.now().isoformat()
@@ -271,12 +294,13 @@ async def kickoff_agent(request: PromptRequest):
 # ─── Sessions API ──────────────────────────────────────────────────────────
 
 @app.get("/api/sessions")
-async def list_sessions():
+async def list_sessions(user_id: str = Depends(get_current_user)):
     sessions = []
     for path in sorted(WORKSPACES_ROOT.iterdir(), key=lambda p: p.stat().st_mtime, reverse=True):
         if path.is_dir():
             meta = _read_meta(path)
-            if meta:
+            # Only list sessions owned by the user
+            if meta and meta.get("user_id") == user_id:
                 file_count = sum(1 for f in path.rglob("*")
                                  if f.is_file() and f.name not in ("meta.json", "terminal.log"))
                 sessions.append({**meta, "file_count": file_count})
@@ -284,8 +308,8 @@ async def list_sessions():
 
 
 @app.get("/api/sessions/{session_id}/files")
-async def list_session_files(session_id: str):
-    sp = _guard(session_id)
+async def list_session_files(session_id: str, user_id: str = Depends(get_current_user)):
+    sp = _guard(session_id, user_id)
     files = []
     for p in sorted(sp.rglob("*")):
         if p.is_file() and p.name not in ("meta.json", "terminal.log"):
@@ -299,9 +323,9 @@ async def list_session_files(session_id: str):
 
 
 @app.get("/api/sessions/{session_id}/logs")
-async def get_session_logs(session_id: str):
+async def get_session_logs(session_id: str, user_id: str = Depends(get_current_user)):
     """Return the full terminal.log content for a session (for history restore)."""
-    sp = _guard(session_id)
+    sp = _guard(session_id, user_id)
     log_file = sp / "terminal.log"
     if not log_file.exists():
         return PlainTextResponse("")
@@ -309,8 +333,8 @@ async def get_session_logs(session_id: str):
 
 
 @app.get("/api/sessions/{session_id}/read")
-async def read_session_file(session_id: str, path: str):
-    sp = _guard(session_id)
+async def read_session_file(session_id: str, path: str, user_id: str = Depends(get_current_user)):
+    sp = _guard(session_id, user_id)
     target = (sp / path).resolve()
     if not str(target).startswith(str(sp)):
         raise HTTPException(status_code=403, detail="Access denied.")
@@ -320,8 +344,8 @@ async def read_session_file(session_id: str, path: str):
 
 
 @app.get("/api/sessions/{session_id}/download")
-async def download_session_file(session_id: str, path: str):
-    sp = _guard(session_id)
+async def download_session_file(session_id: str, path: str, user_id: str = Depends(get_current_user)):
+    sp = _guard(session_id, user_id)
     target = (sp / path).resolve()
     if not str(target).startswith(str(sp)):
         raise HTTPException(status_code=403, detail="Access denied.")
@@ -331,9 +355,9 @@ async def download_session_file(session_id: str, path: str):
 
 
 @app.get("/api/sessions/{session_id}/export")
-async def export_session_zip(session_id: str):
+async def export_session_zip(session_id: str, user_id: str = Depends(get_current_user)):
     """Stream a .zip of the entire session workspace."""
-    sp = _guard(session_id)
+    sp = _guard(session_id, user_id)
 
     def generate():
         buf = BytesIO()
@@ -352,9 +376,9 @@ async def export_session_zip(session_id: str):
 
 
 @app.delete("/api/sessions/{session_id}")
-async def delete_session(session_id: str):
+async def delete_session(session_id: str, user_id: str = Depends(get_current_user)):
     """Permanently delete a session folder and all its files."""
-    sp = _guard(session_id)
+    sp = _guard(session_id, user_id)
     try:
         shutil.rmtree(sp)
     except Exception as e:
@@ -367,9 +391,9 @@ class RenameRequest(BaseModel):
 
 
 @app.post("/api/sessions/{session_id}/rename")
-async def rename_session(session_id: str, body: RenameRequest):
+async def rename_session(session_id: str, body: RenameRequest, user_id: str = Depends(get_current_user)):
     """Update the display name of a session in its meta.json."""
-    sp = _guard(session_id)
+    sp = _guard(session_id, user_id)
     new_name = body.name.strip()
     if not new_name:
         raise HTTPException(status_code=400, detail="Name cannot be empty.")
@@ -377,4 +401,3 @@ async def rename_session(session_id: str, body: RenameRequest):
     meta["name"] = new_name
     _write_meta(sp, meta)
     return {"id": session_id, "name": new_name}
-
