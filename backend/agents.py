@@ -36,7 +36,7 @@ def create_agents(llm_keys: dict = None, provider: str = "gemini") -> dict:
         # Default to Gemini
         api_key = llm_keys.get("GEMINI_API_KEY") or os.environ.get("GEMINI_API_KEY")
         active_llm = LLM(
-            model="gemini/gemini-3-flash-preview",
+            model="gemini/gemini-3.1-pro-preview",
             api_key=api_key,
             temperature=0.5
         )
